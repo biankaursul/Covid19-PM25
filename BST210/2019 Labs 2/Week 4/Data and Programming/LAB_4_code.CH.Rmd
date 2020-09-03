@@ -1,0 +1,280 @@
+---
+title: "Lab 4. Flexible Modelling"
+output:
+  html_document:
+    number_sections: yes
+---
+# Smoothing
+"Smoothing" describes a broad umbrella of techniques which fit a  **nonparametric** model to covariate-outcome data. **Parametric** models are models with explicit functional forms for means and variances. They require assumptions and in return allow you to summarize a data relationship in terms of parameters (for example, $\beta_j$ in a linear regression summarizes the relationship between covariate $x_j$ and the outcome). **Nonparametric** models require fewer (if any) assumptions and are much more flexible, but may be hard to summarize. They are useful for both **visualization** and **prediction**.   
+
+**Note**: You are not required to know how to generate the figures in {Section 1. Scatterplot smoothing} in any language (except LOWESS curve). However, the code can help you understand what those smoothing methods are doing. You can play with it if you are interested in more details, otherwise knowing the general idea behind the method is enough for this course! 
+
+
+
+## Scatterplot Smoothing
+
+We will generate the data for this lab in R. The same data is saved in "lab4-1.csv" if you want to follow along in Stata or SAS. 
+
+### Bin Smoother
+Create categories for x variables and average Y over each category (piecewise constant)
+```{r}
+set.seed(210)
+x.unsort=c(runif(25,0,6),runif(50,6,14),runif(25,14,20))
+x=sort(x.unsort)
+y=-(x-3)^3+(x-6)^3+(x-9)^3+1000+rnorm(100,0,30)
+bin1=mean(y[x>0 & x<=5])
+bin2=mean(y[x>5 & x<=10])
+bin3=mean(y[x>10 & x<=15])
+bin4=mean(y[x>15 & x<=20])
+plot(x,y)
+lines(c(0,5),c(bin1,bin1),col="red")
+lines(c(5,10),c(bin2,bin2),col="red")
+lines(c(10,15),c(bin3,bin3),col="red")
+lines(c(15,20),c(bin4,bin4),col="red")
+```
+
+### Running mean Smoother
+Mean of Y over a moving neighborhood of x, with a relatively small bandwidth (which is 11 in this case) 
+```{r}
+running_mean=c()
+for(i in 1:100){
+  neighbor=max(1,i-5):min(i+5,100)
+  running_mean=c(running_mean,mean(y[neighbor]))
+}
+plot(x,y)
+lines(x,running_mean,col="red")
+```
+
+```{r}
+#How about something unsorted?
+plot(x,y)
+lines(x.unsort,running_mean,col="red")
+```
+
+Note how when the x's are unsorted, this looks a lot like the errors many people had in their HW1 plots.
+
+If we choose a large bandwidth, say, 75, we cannot capture the shape of the data
+```{r}
+running_mean=c()
+for(i in 1:100){
+  neighbor=max(1,i-37):min(i+37,100)
+  running_mean=c(running_mean,mean(y[neighbor]))
+}
+plot(x,y)
+lines(x,running_mean,col="red")
+```
+
+### Running line Smoother
+Linear fit of Y over a moving neighborhood of x, with a relatively small bandwidth (which is 11 in this case) 
+```{r}
+plot(x,y)
+midpoint=c()
+for(i in 1:100){
+  neighbor=max(1,i-5):min(i+5,100)
+  mod=lm(y[neighbor]~x[neighbor])
+  midpoint[i]=sum(coef(mod)*c(1,x[i]))
+  lines(x[neighbor],fitted(mod),col="red")
+}
+lines(x,midpoint,col="blue",lw=2)
+```
+
+
+### Kernel Smoother
+Locally **weighted** running mean smoother of Y over a moving neighborhood of x (the kernel has higher weights the closer you are to the middle of the neighborhood, while bin smoother calculates **equally** weighted mean), with a relatively large bandwidth (which is 75% of the data in this case) 
+```{r}
+kernel_smooth=c()
+without_weights=c()
+for(i in 1:100){
+  neighbor=max(1,i-37):min(i+37,100)
+  weight=exp(-(x[neighbor]-x[i])^2)/sum(exp(-(x[neighbor]-x[i])^2)) ## Gaussian Kernel
+  kernel_smooth=c(kernel_smooth,sum(weight*y[neighbor]))
+}
+plot(x,y)
+lines(x,kernel_smooth,col="red")
+```
+```{r}
+kernel_smooth=c()
+without_weights=c()
+for(i in 1:100){
+  neighbor=max(1,i-37):min(i+37,100)
+  weight=exp(-(x[neighbor]-x[i])^2)/sum(exp(-(x[neighbor]-x[i])^2)) ## Gaussian Kernel
+  kernel_smooth=c(kernel_smooth,sum(weight*y[neighbor]))
+  without_weights=c(without_weights,mean(y[neighbor]))
+}
+plot(x,y)
+lines(x,kernel_smooth,col="red")
+lines(x,without_weights,col = "blue")
+```
+
+Note how the unweighted kernel smoother is the same as the running mean smoother (here shown with a width of 75, like before).
+
+### LOWESS
+Locally weighted running line smoother of Y over a moving neighborhood of x (the kernel has higher weights the closer you are to the middle of the neighborhood), with a relatively large bandwidth (e.g. 40% of the data).  
+
+The smoother span ('span' option in the following code) is the proportion of points used in smoothing at each value. Larger values give more smoothness. It is same as 'bwidth' in Stata.
+```{r}
+plot(x,y)
+fit=loess(y~x,span=0.4) 
+lines(x,fitted(fit),col="red")
+```
+
+Note how things now look different when we change the span. The narrower span makes it pick up more local changes (hot pink curve) and the wide span makes it pick up slightly less of the overall variability. Why does it still follow the curve pretty well even though the span is huge? Because LOWESS is **weighted**, so the far away stuff doesn't affect the curve that much.
+
+```{r}
+plot(x,y)
+fit=loess(y~x,span=0.4) 
+fit2=loess(y~x,span=0.1)
+fit3=loess(y~x,span=0.9)
+lines(x,fitted(fit),col="cornflowerblue")
+lines(x,fitted(fit2),col="deeppink",lwd=2)
+lines(x,fitted(fit3),col="mediumpurple4",lwd=2)
+```
+## Splines
+### Piecewise Constant Splines
+
+We'll specify the knots by ourselves.
+```{r}
+library(splines2)
+mod3=lm(y~bSpline(x,knots=quantile(x,c(0.25,0.5,0.75)),degree=0))
+plot(x,y)
+lines(x[1:25],fitted(mod3)[1:25],type='l',col="red")
+lines(x[26:50],fitted(mod3)[26:50],type='l',col="red")
+lines(x[51:75],fitted(mod3)[51:75],type='l',col="red")
+lines(x[76:99],fitted(mod3)[76:99],type='l',col="red")
+```
+
+```{r}
+mod3b=lm(y~bSpline(x,df=4,degree=0,intercept=TRUE))
+mod3c=lm(y~bSpline(x,df=3,degree=0))
+plot(x,y)
+lines(x,fitted(mod3b),type='l',col="mediumpurple4",lwd=2)
+lines(x,fitted(mod3c),type='l',col="deeppink")
+```
+
+
+Let's look at this with setting degrees of freedom rather than setting knots. The default for df is to have the knots be evenly-spaced quantiles. Note how the pink line (without the intercept) has some weirdness at the right side. This is because the package makes the start and endpoint the same when degree=0 unless intercept=TRUE. Also note that including an intercept means you have to have one more degree of freedom to have the same number of knots. All of this information is available in the documentation of bSpline, which you can get by typing '?bSpline' into the console.
+
+### Piecewise Linear Splines
+can be continuous at knots  
+```{r}
+mod4=lm(y~bSpline(x,df=4,degree=1))
+plot(x,y)
+lines(x,fitted(mod4),col="red")
+```
+
+Similar to constant spline, you can specify the knots you want
+```{r}
+mod5=lm(y~bSpline(x,knots=quantile(x,c(0.15,0.5,0.75)),degree=1))
+plot(x,y)
+lines(x,fitted(mod5),col="red")
+```
+
+Note that I moved a knot from the 25th quantile (default when using df rather than knots) to the 15th quantile (by setting it manually).
+
+```{r}
+temp=summary(mod5)
+rownames(temp$coefficients)=c("intercept","Spline1",'Spline2','Spline3','Spline4')
+temp
+```
+
+It is equivalent to fit a linear model with intercept, x, $(x-Q_{0.25})_+$, $(x-Q_{0.5})_+$, $(x-Q_{0.75})_+$, where $(x-a)_+$ = max(x-a,0). Let's check it!
+
+```{r}
+x1=x-quantile(x,0.25); x1[x1<0]=0
+x2=x-quantile(x,0.50); x2[x2<0]=0
+x3=x-quantile(x,0.75); x3[x3<0]=0
+mod6=lm(y~x+x1+x2+x3)
+plot(x,y)
+lines(x,fitted(mod6),col="red")
+```
+
+```{r}
+summary(mod6)
+```
+
+Question: What are the slopes for four pieces?   
+
+
+### Piecewise Cubic Splines
+match 1st and 2nd derivatives at knots
+```{r}
+mod7=lm(y~bSpline(x,knots=quantile(x,c(0.25,0.5,0.75)),degree=3))
+plot(x,y)
+lines(x,fitted(mod7),col="red")
+```
+
+```{r}
+temp=summary(mod7)
+rownames(temp$coefficients)=c("intercept","Spline1",'Spline2','Spline3','Spline4','Spline5','Spline6')
+temp
+```
+
+Similarly, it is equivalent to fit a linear model with an intercept, $x$, $x^2$, $x^3$, $(x-Q_{0.25})_+^3$, $(x-Q_{0.5})_+^3$, $(x-Q_{0.75})_+^3$.
+
+```{r}
+x1_3=x1^3
+x2_3=x2^3
+x3_3=x3^3
+x_sq=x^2
+x_cb=x^3
+mod8=lm(y~x+x_sq+x_cb+x1_3+x2_3+x3_3)
+plot(x,y)
+lines(x,fitted(mod8),col="red")
+```
+
+```{r}
+summary(mod8)
+```
+
+### Restricted/Natural Cubic Splines
+Linear on edges!
+```{r,message=FALSE,warning=FALSE}
+library(Hmisc)
+mod9=lm(y~rcspline.eval(x,nk=5,inclx=T))
+plot(x,y)
+lines(x,fitted(mod9),col="red")
+```
+
+```{r}
+temp=summary(mod9)
+rownames(temp$coefficients)=c("intercept","Spline1",'Spline2','Spline3','Spline4')
+temp
+```
+
+
+## Generalized Additive Model (GAM)
+A generalized additive model (GAM) is a generalized linear model in which the linear predictor depends linearly on unknown smooth functions of some predictor variables. It is like a cubic spline but with every x value as a knot and a penalty on the second derivative (curvature). (We don't want a discontinuous or a zigzag curve)   
+GAM is very flexible. If now there are three covariates $x_1,x_2, x_3$ and an outcome $y$, and you believe that $y$ and $x_3$ have a linear relationship, you can specify a GAM: $E(Y)=f_1(x_1)+f_2(x_2)+\beta_3x_3$. If you are not sure at all, you can just use a very general model: $E(Y)=f_1(x_1)+f_2(x_2)+f_3(x_3)$, where $f_1,f_2,f_3$ are some nonparametric functions (You cannot write out the explicit form of those functions), and GAM can find the 'best' fit for you. In GAM, we still assume a normal distribution for the error terms (which is parametric), and that is why we say GAM is a **semiparametric** method. 
+
+
+```{r,message=FALSE,warning=FALSE}
+library(gam)
+mod10=gam(y~s(x))
+plot(x,y)
+lines(x,fitted(mod10),col='red')
+```
+
+```{r}
+summary(mod10)
+```
+
+## Assess nonlinearity with Splines/GAM
+Given the dataset "lab4-1.csv", we are interested in whether x and y have a linear relationship. How can we do a formal statistical test?  
+Model 9: $E[Y]=\beta_0+\beta_1x$  
+Model 10: $E[Y]=\beta_0+\beta_1x+Spline(x)/GAM(x)$   
+We use F test to compare the variance explained by the linear term and the variance explained by (linear term + spline term). If the former is not far smaller than the latter, then we say, a single linear term is enough! Remember, F test can only compare nested models!
+
+```{r}
+mod11=lm(y~x)
+mod12=lm(y~x+bSpline(x, df=6, degree = 3))
+## or use GAM mod10=gam(y~x+s(x,4))
+anova(mod11,mod12)
+```
+
+A few questions:
+
+* Q: How to interpret this result?
+* Q: Why the F statistic has df(5,93)?
+* Q: How to test if $x+x^2$ is sufficient?
+* Q: Are more complex models always better?
+* Q: How to write code to deal with more than one covariate?

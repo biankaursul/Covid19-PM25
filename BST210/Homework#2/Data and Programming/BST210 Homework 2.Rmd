@@ -1,0 +1,260 @@
+---
+title: "BST 210 Homework 2"
+author: "Wenjie Gu"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+### Problem 1
+#### #1(a)
+```{r}
+dat = read.csv("SCCS2_v12.csv")
+dat$bmi = dat$weight / (dat$height/100)^2
+age2_gender.tc = lm(tc~age+I(age^2)+gender, data = dat)
+age2_gender_bmi.tc = lm(tc~age+I(age^2)+gender+bmi, data =dat)
+age2_bmi.tc = lm(tc~age+I(age^2)+bmi, data= dat)
+summary(age2_gender.tc)
+summary(age2_bmi.tc)
+summary(age2_gender_bmi.tc)
+```
+If bmi confounds the effect of gender, bmi needs to follow the following conditions:
+
+1) bmi needs to be associated with gender in the study base (potentially yes)
+
+2) bmi needs to be associated with total cholesterol in the absence of exposure (potentially yes)
+
+3) bmi is not a downstream consequence of total cholesterol or gender (potentially yes)
+
+Therefore, it is worth testing if bmi truly confounds the effect of gender.
+
+After adjusting for linear and quadratic age, adding bmi to the linear regression alters the coefficient of gender from 0.0945 to 0.0774, which decreases by 18%. The change in the coefficient of gender is larger than 10%, indicating that bmi confounds the effect of gender.
+
+
+If gender confounds the effect of bmi, gender needs to qualify the following:
+
+1) gender needs to be associated with bmi in the study base(potentially yes)
+
+2) gender needs to be associated with total cholesterol in the absence of bmi (no, the gender predictor alone does not tell info about tc)
+
+3) gender is not a downstream consequence of total cholesterol or bmi(yes)
+
+According to the conventional definition of confounders, gender is not a confounder for the effect of bmi. Let's take a look at the data:
+
+After adjusting for linear and quadratic age, adding gender to the linear regression alters the coefficient of bmi from 0.0305 to 0.0299, which decreases by 1.9% (< 10%), indicating that gender does not confound the effect of bmi.
+
+
+#### #1(b)
+
+```{r}
+age2_gender_bmi_emm.tc = lm(tc~age+I(age^2)+bmi+gender+gender*bmi, data = dat)
+summary(age2_gender_bmi_emm.tc)
+```
+
+Since the p-value for the coefficient of bmi&gender interaction term is 0.5224, which is way larger than 0.05, bmi does not serve as an effect modifier of the effect of gender. Gender does not serve as an effect modifier either, because gender and bmi share the same interaction term and being an effect modifier is reciprocal.
+
+
+### Problem 2
+
+#### #2(a)
+```{r}
+summary(age2_gender_bmi.tc)
+```
+
+tc = 2.6223 + 0.079 * age - 0.0006227 * age^2 + 0.0774 * gender + 0.02988 * bmi
+
+tc (man,30-yo,bmi30) = 2.6223 + 0.079 * 30 - 0.0006227 * (30^2) + 0.0774 * 0 + 0.02988 * 30 = 5.33 mmol/l
+
+After unit conversion, predicted tc = 5.33 * 38.67 = 206.11 mg/dl.
+
+
+#### #2(b)
+
+In R, rstandard() gives the internally studentized residuals and rstudent() gives the externally studentized residuals.
+
+Raw residuals(residuals() in R): $$e_i = Y_i - \hat{Y_i}$$
+
+Standardized residuals(no specific function in R, but can be calculated by dividing raw residuals by the estimated standard deviation): $$ z_i = \frac{e_i}{s_e} = \frac{e_i}{\sqrt{SSE/(N-p-1)}} $$
+
+Internally studentized residuals(rstandard() in R): $$ r_i = \frac{e_i}{SE(e_i)} = \frac{e_i}{\hat{\sigma}\sqrt{1-H_{ii}}}$$
+
+Externally studentized residuals(rstudent() in R): $$ r_{(i)} = \frac{e_i}{\hat{\sigma_{(i)}}\sqrt{1-H_{ii}}} $$
+
+Reference: https://web.stanford.edu/class/stats191/notebooks/Diagnostics_for_multiple_regression.html#Types-of-residuals and lab notes.
+
+
+#### #2(c)
+```{r}
+standardized_res = function(model,n,p){
+  raw = residuals(model)
+  SSE = sum(raw^2)
+  res = raw/(sqrt(SSE/(n-p-1)))
+  return(res)
+}
+standard = standardized_res(age2_gender_bmi.tc, 527, 4)
+```
+
+
+```{r}
+raw = residuals(age2_gender_bmi.tc)
+standard = standardized_res(age2_gender_bmi.tc, 527, 4)
+int_student = rstandard(age2_gender_bmi.tc)
+ext_student = rstudent(age2_gender_bmi.tc)
+residuals = data.frame(raw,standard,int_student,ext_student)
+plot(residuals)
+cor(residuals, method = "pearson")
+```
+
+Pearson correlation coefficient between raw and standardized residuals is 1 which makes sense because standardized residuals are directly derived from raw residuals. Pearson corrrelation coefficients between other pairs of residuals are just very close to 1, which indicates strong linear association between either pair of residuals, but not exactly 1 due to slight difference in the ways they're calculated. 
+
+For this SCCS2 example, we can use any residual but the scaled residuals (standardized and studentized) are preferred.
+
+
+#### #2(d)
+```{r}
+summary(raw)
+summary(standard)
+summary(ext_student)
+summary(int_student)
+```
+
+The mean raw residuals is zero.
+
+The mean standardized residuals is also zero.
+
+The mean ext_studentized residuals is 0.00041, which is close to zero.
+
+The mean int_studentized residuals is -0.000089, which is close to zero.
+
+Assuming the regression line is the "best" fit, then the sum of residuals should be zero, thus the raw and standardized residuals means always equal zero in the "best" fit model.
+
+While the internal and external studentized residuals should have non-zero means since each residual is scaled with respect to a specific term associated with each observation.
+
+
+#### #2(e)
+```{r}
+par(mfrow = c(1,2))
+hist(ext_student, probability = T)
+m = mean(ext_student)
+std = sqrt(var(ext_student))
+curve(dnorm(x, mean = m, sd = std), col = "red", add = T)
+
+qqnorm(ext_student)
+qqline(ext_student, col = "red")
+```
+
+According to the histogram, the median is slightly to the left of zero and the distribution is slightly right skewed.
+
+The normal qq plot of the external studentized residuals has a longer right tail deviating up from the reference normal qq line.
+
+Therefore, the external studentized residuals are not normally distributed.
+
+
+#### #2(f)
+```{r}
+dat$stdres = standard
+resid2 = dat[dat$stdres > 2,c("age","gender","bmi","tc","stdres")]
+resid3 = dat[dat$stdres > 3,c("age","gender","bmi","tc","stdres")] 
+resid2
+resid3
+predict(age2_gender_bmi.tc)[c(103,451,514)]
+```
+
+There are three individuals having standardized residuals >3. For each of the cases, the predicted tc value is much lower than the true tc. For subject 103, the predicted tc is 5.98, while his real tc is 9.93. For subject 451, the predicted tc is 5.81, whereas her real tc is 9.91. And for subject 514, the predicted tc is 5.95 while her real tc is 9.10. The high residuals of these three observations are resulting from the large difference between the predicted and true values.
+
+
+### Problem 3
+
+#### #3(a)
+```{r}
+hat_val = hat(model.matrix(age2_gender_bmi.tc))
+sum(hat_val<0)
+mean(hat_val)
+p = 4
+n = nrow(dat)
+(p+1)/n
+```
+
+After counting for negative elements, the function returns zero, which means no negative element in the hat values list. The mean value of hat_val is 0.00949, where (p+1)/n also equals 0.00949. Therefore, in this case, all hat values are positive and average out to equal (p+1)/n.
+
+
+#### #3(b)
+```{r}
+dat$hat = hat_val
+hist(hat_val)
+boxplot(hat_val)
+lev1 = dat[dat$hat > 2*(p+1)/n, c("age","gender","bmi","tc","hat")]
+head(lev1)
+lev2 = dat[dat$hat > 4*(p+1)/n, c("age","gender","bmi","tc","hat")]
+lev2
+attach(dat)
+mean(age)
+mean(bmi)
+detach(dat)
+```
+
+A total of 3 individuals have leverage >4(p+1)/n.Leverage measures how far observation i’s covariates
+are from the overall covariate average. For the individuals with high leverage, they are of older age (>78 yo), much larger than average age of 43. The other individual with high leverage has extremely high bmi value (bmi = 40.49), much higher than average bmi of 24.16. 
+
+
+### Problem 4
+
+#### #4(a)
+```{r}
+dat$cook = cooks.distance(age2_gender_bmi.tc)
+hist(dat$cook)
+boxplot(dat$cook)
+sum(dat$cook <= 0)
+```
+
+No non-positive cook's distance in this example.
+
+
+#### #4(b)
+```{r}
+cook1 = dat[dat$cook > 4/n, c("age","gender","bmi","tc","cook")]
+cook2 = dat[dat$cook > 12/n, c("age","gender","bmi","tc","cook")]
+head(cook1)
+cook2
+```
+
+There are two observations with high cook's distance (>4/n), this is probably due to their high total cholesterol level though their age and bmi are not too high, which could potentially have high influence on the regression model.
+
+
+#### #4(c)
+```{r}
+dat$dfit = dffits(age2_gender_bmi.tc)
+high_dfit = dat[abs(dat$dfit)>(2*sqrt((p+1)/n)), c("age","gender","bmi","tc","dfit")]
+high_dfit = high_dfit[order(-abs(high_dfit$dfit)),]
+high_dfit
+```
+
+Yes, there are a few individuals that have high influenc ($$|DFFITS_i| > 2 \sqrt{(p+1)/n}$$). After sorting by dffits values, we found that the first two observations with the highest dffits values are the ones observed from #4(b) with high cook's distances.
+
+
+### Problem 5
+
+#### #5(a)
+```{r}
+dat[(dat$stdres > 3) & (dat$cook > 12/n) & (dat$hat > 4*(p+1)/n), c("age","gender","bmi","tc","hat", "cook","stdres")]
+dat[(dat$stdres > 3) & (dat$cook > 12/n), c("age","gender","bmi","tc","hat", "cook", "stdres")]
+dat[(dat$stdres > 3) & (dat$hat > 4*(p+1)/n), c("age","gender","bmi","tc","hat", "cook", "stdres")]
+```
+
+There is no individual meeting all of the three conditions (high standardized residual, high cook's distance and high leverage).
+There are two individuals having both high standardized residual and high cook's distance.
+There is no overlap between high standardized residual and high leverage.
+
+
+#### #5(b)
+```{r}
+dat[(dat$stdres > 3) | (dat$cook > 12/n) | (dat$hat > 4*(p+1)/n),c("age","gender","bmi","tc","hat", "cook","stdres")]
+
+newdat = dat[!((dat$stdres > 3) | (dat$cook > 12/n) | (dat$hat > 4*(p+1)/n)),c("age","gender","bmi","tc","hat", "cook","stdres")]
+nrow(newdat)
+newmodel = lm(tc~ age +I(age^2) + gender + bmi, data = newdat)
+summary(newmodel)
+summary(age2_gender_bmi.tc)
+```
+
+After eliminating 6 observations with standardized residual >3, cook's distance  >12/n, or leverage >4(p+1)/n and fitting regression model to the new data, we found that the coefficient of age changes from 0.0792 to 0.0763(-3.7%), the coefficient for quadratic age from -0.0006227 to -0.0006011 (+3.4%), the coefficient for gender from 0.0774 to 0.0608(-21%), and the coefficient for bmi from 0.0299 to 0.0288(-3.7%). Only the change of coefficient for gender is significant. The overall findings do not change much.

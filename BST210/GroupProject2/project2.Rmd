@@ -1,0 +1,24 @@
+---
+title: "BST 210 Project 2"
+author: "Shaoling Han"
+date: "December 2, 2019"
+output: pdf_document
+---
+```{r}
+library(foreign)
+framingham=read.dta('~/Documents/Class Info/Harvard HSPH/Fall2019/BST210/GroupProject2/Data and Programs/framingham.dta')
+```
+
+outcome: death
+
+part one: matching agecat+sex -- conditional logistic regression;
+          no matching, multinomial logistic regression -- selected predictors ~ cvd+chd+death(5 situations)
+
+part two: survival analysis 
+
+```{r}
+framingham2=framingham
+framingham2=framingham2[(framingham2$prevchd==0&framingham2$prevap==0&framingham2$prevmi==0&framingham2$prevstrk==0),]
+summary(framingham2)
+str(framingham2)
+```

@@ -1,0 +1,293 @@
+---
+title: "BST 210 Homework 1"
+author: "Wenjie Gu"
+Date: "September 22, 2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Question 1
+
+#### #1(a)
+
+```{r}
+dat <- read.csv("~/Documents/Class Info/Harvard HSPH/Fall2019/BST210/Homework#1/Data and Programs/SCCS2_v12.csv")
+head(dat)
+age.tc = lm(tc~age, data = dat)
+summary(age.tc)
+confint(age.tc)
+```
+```{r}
+par(mfrow = c(1,1))
+plot(dat$tc~dat$age, xlab = "age", ylab = "total cholesterol", type = "p", main="Relationship between Total Cholesterol and Age", pch = 20)
+abline(age.tc, col = "blue")
+legend("topright", "Fitted linear regression line", col = "blue", lwd = 1, cex = 0.8)
+```
+
+```  {r}
+cor.test(dat$age, dat$tc)
+```
+
+##### Simple linear regression model: 
+intercept: 4.376, p-value < 2e-16, 95% conf interval: (4.109, 4.643)
+
+slope: 0.026, p-value < 2e-16, 95% conf interval: (0.020, 0.032)
+
+**Interpretation:**For a change of an age decade, the mean total cholesterol level increases by 2.6 units. The p-value is smaller than 0.05, indicating the statistical significance of the slope value.
+
+
+##### Pearson's correlation test:
+p-value < 2.2e-16, 95% confidence interval: (0.2836,0.4324), sample estimates: 0.36, the result from pearson's correlation test indicates that there is a weak positive correlation between age and total cholesterol(r = 0.36)
+
+##### Comparing simple linear regression model with Pearson's test:
+Multiple R-squared value from linear regression model is 0.1298, which means that only 13% of the observed total cholesterol data can be explained by the linear regression of total cholesterol on age, indicating that the linear model is not a strong fit for the date. The Pearson's correlation coefficient corroborates this suggestion, suggesting the linear association exists but not strong. 
+
+#### #1(b)
+```{r}
+par(mfrow = c(2,2))
+plot(resid(age.tc)~fitted(age.tc), main = "Residual vs fitted", pch = 20, cex = 0.7)
+abline(h = 0, col = "red")
+qqnorm(resid(age.tc))
+qqline(resid(age.tc), col = "red")
+hist(resid(age.tc),prob = TRUE)
+m = mean(resid(age.tc))
+std = sqrt(var(resid(age.tc)))
+curve(dnorm(x,mean = m, sd = std),add = TRUE, col = "red")
+```
+
+No, the residuals are not normally distributed according to the normal Q-Q plot. The right tail of the sample quantile deviates from the reference line.
+Also, according to the histogram of the residual, the residual data is slightly skewed to the right.
+There are a few outliers in the residual plot that might contribute to the skewed distribution.
+
+#### #1(c)
+```{r}
+par(mfrow = c(1,1))
+plot(dat$age,dat$tc, xlab = "age", ylab = "Total Cholesterol", main = "Lowess smoother", pch = 20)
+lines(loess.smooth(dat$age,dat$tc), col = 'red',lty = 1, lwd = 2)
+```
+
+The Lowess smoothed curve suggests there might be a nonlinear effect of age on the prediction of total cholesterol.
+
+```{r}
+age_2.tc = lm(tc~ age + I(age^2),data = dat)
+summary(age_2.tc)
+```
+
+Since the p-value for age^2 coefficient term is 0.000387, which <005, there is a statistically significant evidence suggesting a nonlinear effect of age to predict total cholesterol.
+
+### Question 2
+
+#### #2(a)
+```{r}
+t.test(dat$tc ~ dat$gender, var.equal = T)
+```
+
+The two sample t-test t value is -0.63874, which gives a p-value of 0.523 => We fail to reject null hypothesis that there's no difference in mean total cholesterol between male and female.
+
+i.e. There's no evidence suggesting a statistically significant difference in mean tc between males and females
+
+```{r}
+gender.tc = lm(tc~gender, data= dat)
+summary(gender.tc)
+```
+
+from the linear regression model, p-value of gender coefficient is 0.523, equivalent to p-value in the t-test
+
+from the linear regression model, the coefficients for gender is 0.05870, equivalent to the mean difference of total cholesterol between female and male 
+
+y intercept value in the linear regression model is 5.49, equivalent to tc mean of females
+
+#### #2(b)
+```{r}
+age_2_gender.tc = lm(tc~age + I(age^2) + gender, data = dat)
+summary(age_2_gender.tc)
+```
+
+The coefficients of age and age-square change from 0.09203 to 0.0909455, and from -0.0007389 to -0.0007241, respectively. The adjusted analysis does not give a significant different result than the regression model using both linear and quadratic age. Therefore, we do not consider gender as a confounder of the effect of linear and quadratic age on tc.
+
+Gender is not an independent predictor as the p-value for gender coefficients > 0.05.
+
+#### #2(c)
+```{r}
+par(mfrow = c(1,1))
+
+color <- function(gender){
+  color = c(0, length(gender))
+  for (i in 1:length(gender)){
+    if (gender[i] == 0) {
+      color[i] = "red"
+      }
+    else {
+      color[i] = "blue"
+    }
+  }
+  return (color)
+}  
+
+plot(dat$age, dat$tc, xlab = "age", ylab = "total cholesterol", col = color(dat$gender), main = "Total Cholesterol vs. age", cex = 0.7)
+lines(loess.smooth(dat$age[which(dat$gender == 0)], fitted(age_2_gender.tc)[which(dat$gender == 0)]), col = "red", lwd = 2)
+lines(loess.smooth(dat$age[which(dat$gender == 1)], fitted(age_2_gender.tc)[which(dat$gender == 1)]), col = "blue", lwd =2)
+legend("topright",c("fitted regression line for females", "fitted regression line for males"),col = c("red","blue"),lty = 1:1,cex = 0.8)
+```
+
+The two fitted regression lines are parallel to each other.
+
+#### #2(d)
+```{r}
+full_int = lm(tc ~ age + I(age^2) + gender + age*gender + I(age^2)*gender, data = dat)
+summary(full_int)
+```
+
+P-value for the coefficient of interaction between gender and age is 0.04572, and for interaction between gender and quadratic age is 0.00935, both of which < 0.05, indicating that both interactions are statistically significant.
+
+Thus gender is an effect modifier of both the effect of linear and quadratic age on total cholesterol.
+
+```{r}
+plot(dat$age, dat$tc, xlab = "age", ylab = "total cholesterol", col = color(dat$gender), main = "Total Cholesterol vs. age",cex = 0.7)
+lines(loess.smooth(dat$age[which(dat$gender == 0)], fitted(full_int)[which(dat$gender == 0)]), col = "red", lwd = 2)
+lines(loess.smooth(dat$age[which(dat$gender == 1)], fitted(full_int)[which(dat$gender == 1)]), col = "blue", lwd =2)
+legend("topright",c("fitted regression line for females", "fitted regression line for males"),col = c("red","blue"),lty = 1:1, cex = 0.8)
+```
+
+The curves for females and males are no longer parallel. After the age of 50, the difference of predicted total cholesterol between females and males enlarges as age increases.
+
+#### #2(e)
+```{r}
+r.square = c( full = summary(full_int)$r.squared, 
+              age = summary(age.tc)$r.squared, 
+              age_2 = summary(age_2.tc)$r.squared, 
+              age.gender = summary(age_2_gender.tc)$r.squared, 
+              gender = summary(gender.tc)$r.squared)
+r.square
+```
+
+Full interaction model has the highest r-squared value.
+```{r}
+adj.r.square = c (full = summary(full_int)$adj.r.squared,
+                  age = summary(age.tc)$adj.r.squared,
+                  age_2 = summary(age_2.tc)$adj.r.squared,
+                  age.gender = summary(age_2_gender.tc)$adj.r.squared,
+                  gender = summary(gender.tc)$adj.r.squared)
+adj.r.square
+```
+
+Full interaction model has the highest adjusted r-squared value.
+
+```{r}
+root_MSE = c (full = summary(full_int)$sigma,
+                  age = summary(age.tc)$sigma,
+                  age_2 = summary(age_2.tc)$sigma,
+                  age.gender = summary(age_2_gender.tc)$sigma,
+                  gender = summary(gender.tc)$sigma)
+root_MSE
+```
+
+Full interaction has the smallest square-rooted MSE
+
+#### #2(f)
+```{r}
+dat_woman = dat[dat$gender == 0, ]
+dat_man = dat[dat$gender == 1, ]
+age_2_woman = lm(tc~age + I(age^2), data = dat_woman)
+age_2_man = lm(tc~age + I(age^2), data = dat_man)
+par(mfrow = c(1,2))
+
+# plot regression for women
+plot(dat_woman$age, dat_woman$tc, xlab = "age", ylab = "total cholesterol", main = "Total Cholesterol vs. Age for WOMEN", cex.main = 0.8, pch = 20)
+lines(loess.smooth(dat_woman$age, fitted(age_2_woman)), col= "red",lwd = 2)
+lines(loess.smooth(dat$age[which(dat$gender == 0)], fitted(full_int)[which(dat$gender == 0)]), col = "blue", lwd = 2, lty = "dotdash")
+legend("topright", c("Fitted regression line:age + age^2", "Fitted regression line: full"), col = c("red","blue"), lwd = 1:1,lty = c("solid","dotdash"), cex = 0.7)
+
+# plot regression for men
+plot(dat_man$age, dat_man$tc, xlab = "age", ylab = "total cholesterol", main = "Total Cholesterol vs. Age for MEN", cex.main = 0.8, pch = 20)
+lines(loess.smooth(dat_man$age, fitted(age_2_man)), col= "red",lwd = 2)
+lines(loess.smooth(dat$age[which(dat$gender == 1)], fitted(full_int)[which(dat$gender == 1)]), col = "blue", lwd = 2, lty = "dotdash")
+legend("topright", c("Fitted regression line:age + age^2", "Fitted regression line: full"), col = c("red","blue"), lwd = 1:1, lty = c("solid","dotdash"), cex = 0.7)
+```
+
+
+Both models give the same prediction curve for women and for men separately. 
+
+I would choose the full interaction model. In this case, there are only two categories in gender variable, so we only need to separately generate two linear regression models for males and females. But in other cases, the categorical variable may have more categories, which make it harder to generate a separate linear regression model for each category.
+
+The full interaction model incorporates all possible values for the categorical variable and generate a more comprehensive model.
+
+
+### Question 3
+
+#### #3(a)
+```{r}
+dat$BMI = dat$weight / (dat$height/100)^2
+dat$BMI_categorical[dat$BMI < 18.5] = 0
+dat$BMI_categorical[(dat$BMI >= 18.5) & (dat$BMI < 25)] = 1
+dat$BMI_categorical[(dat$BMI >= 25) & (dat$BMI < 30)] = 2
+dat$BMI_categorical[dat$BMI >= 30] = 3
+
+newdat = dat[order(dat$BMI),]
+BMI_cont.tc = lm(tc~BMI, data = newdat)
+BMI_cat.tc = lm(tc~BMI_categorical, data = newdat)
+
+summary(BMI_cont.tc)
+summary(BMI_cat.tc)
+```
+
+Comparing to continuous BMI model, categorical BMI model has a larger residual standard error, which indicates a higher residual value. 
+
+```{r}
+par(mfrow = c(1,1))
+plot(newdat$BMI, newdat$tc, main = "Total Cholesterol vs. BMI", xlab = "BMI", ylab = "Total Cholesterol", pch = 20)
+lines(newdat$BMI, fitted(BMI_cont.tc), col = "red", lwd = 1.5)
+lines(newdat$BMI, fitted(BMI_cat.tc), col = "blue", lwd = 1.5, lty = "dashed")
+legend("topright", c("Fitted regression line for continuous BMI", "Fitted regression line for categorical BMI"), col = c("red", "blue"), lwd = 1, lty = c("solid","dashed"), cex = 0.7)
+```
+
+I prefer continuous BMI model because it has smaller residual value which means a relatively better fit. When transforming a continuous variable to a categorical variable, there will be loss of information which will leads to the inprecision of the prediction.
+
+#### #3(b)
+```{r}
+BMI_quad = lm(tc~BMI + I(BMI^2), data = newdat)
+summary(BMI_quad)
+```
+
+Adding a quadratic BMI term makes the model slightly better, R^2 improves from 0.05685 to 0.06691.
+
+#### #3(c)
+```{r}
+BMI_multi = lm(tc ~ age + I(age^2) + gender + BMI + I(BMI^2) + age*gender + I(age^2)*gender , data = dat)
+summary(BMI_multi)
+```
+I choose the model with covariates: age, age^2, gender, BMI, BMI^2, and adding the effect modification of age&gender, age^2&gender. Because this model gives the least residual standard erro and the largest adjusted R-squared value among the models that I tried. Also the p-values for the interaction between BMI and other covariates are not significant, indicating BMI is not an effect modifier of the other covariates.
+
+#### #3(d)
+```{r}
+par(mfrow = c(1,2))
+h = hat(model.matrix(BMI_multi))
+plot(h, col="blue",
+     main="Index plot of leverage", 
+     ylab="leverages", xlab="observation number", pch=20)  
+abline(h=2*(8)/nrow(dat), col="red", lwd=2)  
+
+
+cook <- cooks.distance(BMI_multi)
+plot(cook, col="blue",
+     main="Index plot of Cook's Distances", 
+     ylab="Cook's distances", xlab="observation number", pch=20)
+abline(h=(4/(nrow(dat)-2)), col="red", lwd=2)
+```
+
+```{r}
+nrow(dat[h > ((2*(8))/nrow(dat)),]) # number of high leverage
+nrow(dat[cook > 4/(nrow(dat)-2),]) # number of high cook's distance
+nrow(dat[cook > 4/(nrow(dat)-2) & h > ((2*(8))/nrow(dat)),]) # number of high leverage $ high cook's distance
+
+newdat2 = dat[!(cook > 4/(nrow(dat)-2) & h > ((2*(8))/nrow(dat))),]
+BMI_multi_adj = lm(tc ~ age + I(age^2) + gender + BMI +  I(BMI^2) + age*gender + I(age^2)*gender, data = newdat2)
+summary(BMI_multi_adj)
+summary(BMI_multi)
+```
+
+43 data points have high leverage, 20 data points have high Cook's distance. 8 of them have both high leverage and high Cook's distance. After dropping these 8 points from the dataset, the coefficients of the covariates change, adjusted R-squared decreases, and the residual standard error decreases.

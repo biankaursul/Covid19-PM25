@@ -1,0 +1,66 @@
+---
+title: "BST210 HW 9"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+## compute statistics from pilot study
+n = 250 # total number of subjects in the pilot study
+n1 = 31 # number of obese subjects
+n2 = 219 # number of non-obese subjects
+p1 = 3/31 # proportion of developing CHD among the obese subjects
+p2 = 11/219 # proportion of developing CHD among the non-obese subjects 
+hr = 1.990321 #estimated hazard ratio from the proportional hazards model comparing obese vs. non-obese subjects 
+cr = 1-(3+11)/250  #proportion of censored subjects 
+```
+
+(a)
+```{r}
+library(Hmisc, verbose=FALSE) 
+size.a = round(bsamsize(p1 = p1, p2 = p2, fraction = n1/n, alpha = 0.05, power = .90),0) 
+size.a 
+```
+
+The sample size should be at least 2848, holding the proportion of obese and non-obese subjects constant.
+
+(b)
+```{r}
+library(powerSurvEpi)
+size.b = ssizeCT.default(power = 0.9, k = n1/n2, pE = p1, pC = p2, RR = hr, alpha = 0.05) 
+size.b
+
+size.hr = round(ssizeCT.default(power = 0.9, k = n1/n2, pE = p1, pC = p2, RR = 2, alpha = 0.05),0) 
+size.hr 
+```
+(c)
+```{r}
+# binomial proportions
+bsamsize(p1 = p1, p2 = p2, fraction = 1/2, alpha = 0.05, power = .90) 
+
+# log rank test
+ssizeCT.default(power = 0.9, k = 1, pE = p1, pC = p2, RR = hr, alpha = 0.05) 
+```
+
+(e)
+```{r}
+# compute the sample size when HR=2.0
+size.hr = round(ssizeCT.default(power = 0.9, k = n1/n2, pE = p1, pC = p2, RR = 2, alpha = 0.05),0) 
+size.hr 
+
+# compute and plot power as a function of HR
+# Did not do OR below
+hr_grid = seq(1.5, 2.5, 0.1)
+power.hr = sapply(hr_grid, function(x){ 
+powerCT.default(nE=size.hr[1], nC=size.hr[2], pE = p1, pC=p2, RR = x, alpha = 0.05) }) 
+names(power.hr) = paste0('HR=',hr_grid)
+power.hr 
+
+plot(hr_grid, power.hr, type = 'o', pch = 19, lwd = 2, col = 2, xlab = 'HR', ylab = 'power', main = paste0('Power vs. HR when N1=', size.hr[1],  ',  N2=', size.hr[2])) 
+abline(h = 0.9, lty = 2) 
+abline(v = 2.0, lty = 2) 
+
+```

@@ -1,0 +1,32 @@
+proc import out = dat
+datafile = "\\tsclient\Week 4\lab4-1.csv"
+dbms = csv;
+run;
+
+proc loess data = dat;
+model y = x/smooth=0.4;
+run;
+
+
+proc transreg data=dat ss2 short;
+   model identity(y) = pspline(x / nknots=3 degree = 1);
+run;
+proc transreg data=dat ss2 short;
+   model identity(y) = spline(x / knots=6 10 14);
+run;
+proc gam data=dat;
+   model y = spline(x);
+run;
+
+proc gam data=dat plots=COMPONENTS(additive clm);
+   model y = spline(x);
+run;
+
+
+data dat;
+  set dat;
+  x2=x**2;
+
+proc gam data=dat;
+   model y = param(x x2) spline(x);
+run;

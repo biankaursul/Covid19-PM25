@@ -1,0 +1,245 @@
+---
+title: "Group Project 2"
+author: "Eileen Zhang"
+date: "12/3/2019"
+output: html_document
+---
+Data Clean-up
+```{r}
+#setwd("C:/Users/eilee/Downloads")
+framingham <- read_dta(file=file.choose())
+dat<-framingham[(framingham$prevap==0 & framingham$prevchd==0 & framingham$prevmi==0 & framingham$prevstrk==0),]
+dat$sex<- dat$sex - 1
+dat<-dat%>% drop_na(bpmeds)
+dat$sex = as.factor(dat$sex)
+dat$prevhyp = as.factor(dat$prevhyp)
+dat$agecat = as.factor(dat$agecat)
+dat$bpmeds = as.factor(dat$bpmeds)
+dat$diabetes = as.factor(dat$diabetes)
+```
+
+Binary Logistic Model (Effect of prevhyp on death)
+```{r}
+datsub<-dat[c(1,2,4:12,17,18,35)]
+datsub<-na.omit(datsub)
+modlogit.full<-glm(death ~.,family=binomial(),data=datsub)
+modlogit.step<-step(modlogit.full,trace=0)
+summary(modlogit.step)
+```
+
+```{r}
+modlogit<-glm(death~prevhyp,family=binomial(),data=datsub)
+summary(modlogit)
+exp(coef(modlogit))
+```
+OR = 3.041469
+
+```{r}
+modlogit.agecat<-glm(death~prevhyp+agecat,family=binomial(),data=datsub)
+summary(modlogit.agecat)
+modlogit.agecat.emm<-glm(death~prevhyp*agecat,family=binomial(),data=datsub)
+summary(modlogit.agecat.emm)
+```
+Agecat is a confounder for prevhyp but not a EMM.
+
+```{r}
+modlogit.sex<-glm(death~prevhyp+sex,family=binomial(),data=datsub)
+summary(modlogit.sex)
+modlogit.sex.emm<-glm(death~prevhyp*sex,family=binomial(),data=datsub)
+summary(modlogit.sex.emm)
+```
+Sex is not a confounder for prevhype, but a EMM.
+
+```{r}
+modlogit.test.interact<-glm(death~ prevhyp + agecat + sex*prevhyp, family = binomial(), 
+    data = datsub)
+summary(modlogit.test.interact)
+modlogit.test<-glm(death~ prevhyp + agecat + sex, family = binomial(), 
+    data = datsub)
+summary(modlogit.test)
+anova(modlogit.test.interact,modlogit.test,test="Chisq")
+exp(coef(modlogit.test))
+```
+OR = 2.1709706
+
+```{r}
+modlogit.opt<-glm(death~ sex + sysbp + diabp + cursmoke + cigpday + 
+    diabetes + bpmeds + glucose + prevhyp + agecat + sex*prevhyp, family = binomial(), 
+    data = datsub)
+summary(modlogit.opt)
+anova(modlogit.step,modlogit.opt, test="Chisq")
+```
+
+```{r}
+exp(coef(modlogit.step))
+library(ROCR)
+library(ResourceSelection)
+library(LogisticDx)
+fitted.logit_death=predict(modlogit.step,newdata = datsub,type = 'response')
+pred <- prediction(fitted.logit_death, datsub$death)
+perf <- performance(pred,"tpr","fpr")
+plot(perf,colorize=T)
+gof(modlogit.step)
+```
+OR comparing prevhyp =1 to 0, 1.33307692
+AUC = 78.7% (77.1%-80.2%)
+
+----------------------------------------------------------------------------------------------------------------------------------------------------
+Cox proportional model
+```{r}
+library(survival)
+library(survminer)
+dat$survobject = Surv(dat$timedth,dat$death)
+datsub.sur<-dat[c(1,2,4:12,17,35,37)]
+datsub.sur<-na.omit(datsub.sur)
+modsur.full <- coxph(survobject~.,data=datsub.sur)
+summary(modsur.full)
+```
+Stepwise Selection
+```{r}
+modsur.step <-step(modsur.full,trace=0)
+summary(modsur.step)
+```
+ROC modsur.step
+```{r}
+library(survivalROC)
+nobs <- NROW(datsub.sur)
+cutoff <- 1000
+## MAYOSCORE 4, METHOD = NNE
+Mayo4.0= survivalROC(Stime=datsub3.sur$timedth,  
+                     status=datsub3.sur$death,      
+                     marker = predict(modsur.step,datsub.sur,type='lp'),     
+                     predict.time = cutoff,span = 0.25*nobs^(-0.20) )
+plot(Mayo4.0$FP, Mayo4.0$TP, type="l", xlim=c(0,1), ylim=c(0,1),   
+     xlab=paste( "FP", "", "AUC = ",round(Mayo4.0$AUC,3)), 
+     ylab="TP",main="Mayoscore 4, Method = NNE 
+     Year = 1")
+abline(0,1)
+```
+Cutoff > 1000, AUC =0.709
+
+Assessing PH assumption
+(1) Using Schoenfeld residuals 
+```{r}
+test.ph <- cox.zph(modsur.step)
+test.ph
+```
+Add time interaction term for sex
+Eliminate insignificant covariates
+```{r}
+dat$survobject = Surv(dat$timedth,dat$death)
+datsub2.sur<-dat[c(1,2,4:12,17,35,37,32)]
+datsub2.sur<-na.omit(datsub2.sur)
+datsub2.sur$agecat=as.factor(datsub2.sur$agecat)
+datsub2.sur$sex=as.factor(datsub2.sur$sex)
+datsub2.sur$diabetes=as.factor(datsub2.sur$diabetes)
+datsub2.sur$prevhyp=as.factor(datsub2.sur$prevhyp)
+datsub2.sur$bpmeds=as.factor(datsub2.sur$bpmeds)
+datsub2.sur$sex_time=(as.numeric(datsub2.sur$sex)-1)*log(datsub2.sur$timedth)
+modsur.opt=coxph(survobject~sex+sex_time+sysbp+diabp+cigpday+diabetes+bpmeds+glucose+prevhyp+agecat,data = datsub2.sur)
+summary(modsur.opt)
+modsur.opt2=coxph(survobject~sex+sex_time+sysbp+cigpday+diabetes+prevhyp+agecat,data = datsub2.sur)
+summary(modsur.opt2)
+```
+HR for prehyp = 0.7903
+
+ROC modsur.opt2
+```{r}
+library(survivalROC)
+datsub3.sur<-dat[c(18,32,1,2,4:12,17,35,37,32)]
+datsub3.sur<-na.omit(datsub3.sur)
+datsub3.sur=datsub3.sur[,c(1,2)]
+nobs <- NROW(datsub3.sur)
+cutoff <- 1000
+## MAYOSCORE 4, METHOD = NNE
+Mayo4.1= survivalROC(Stime=datsub3.sur$timedth,  
+                     status=datsub3.sur$death,      
+                     marker = predict(modsur.opt2,datsub2.sur,type='lp'),     
+                     predict.time = cutoff,span = 0.25*nobs^(-0.20) )
+plot(Mayo4.1$FP, Mayo4.1$TP, type="l", xlim=c(0,1), ylim=c(0,1),   
+     xlab=paste( "FP", "", "AUC = ",round(Mayo4.1$AUC,3)), 
+     ylab="TP",main="Mayoscore 4, Method = NNE 
+     Year = 1")
+abline(0,1)
+```
+Cutoff > 1000, AUC =0.863
+
+Survival Plot for different agecat using modsur.opt2
+
+Agecat = 1
+```{r}
+newdata1=data.frame(sex = factor(c(0,0,1,1)), prevhyp = factor(c(0,1,0,1)),
+                               agecat = factor(c(1,1,1,1)),diabetes = factor(c(0,0,0,0)),
+                               sysbp = rep(mean(datsub2.sur$sysbp, na.rm = TRUE), 4),
+                               sex_time = c(rep(mean(datsub2.sur$sex_time[datsub2.sur$sex==0], na.rm = TRUE),2),rep(mean(datsub2.sur$sex_time[datsub2.sur$sex==1], na.rm = TRUE), 2)),
+                               cigpday = rep(mean(datsub2.sur$cigpday, na.rm = TRUE), 4))
+
+ggsurvplot(survfit(modsur.opt2,newdata =newdata1),data=datsub2.sur)
+```
+Agecat = 2
+```{r}
+newdata2=data.frame(sex = factor(c(0,0,1,1)), prevhyp = factor(c(0,1,0,1)),
+                               agecat = factor(c(2,2,2,2)),diabetes = factor(c(0,0,0,0)),
+                               sysbp = rep(mean(datsub2.sur$sysbp, na.rm = TRUE), 4),
+                               sex_time = c(rep(mean(datsub2.sur$sex_time[datsub2.sur$sex==0], na.rm = TRUE),2),rep(mean(datsub2.sur$sex_time[datsub2.sur$sex==1], na.rm = TRUE), 2)),
+                               cigpday = rep(mean(datsub2.sur$cigpday, na.rm = TRUE), 4))
+
+ggsurvplot(survfit(modsur.opt2,newdata =newdata2),data=datsub2.sur)
+```
+Agecat = 3
+```{r}
+newdata3=data.frame(sex = factor(c(0,0,1,1)), prevhyp = factor(c(0,1,0,1)),
+                               agecat = factor(c(3,3,3,3)),diabetes = factor(c(0,0,0,0)),
+                               sysbp = rep(mean(datsub2.sur$sysbp, na.rm = TRUE), 4),
+                               sex_time = c(rep(mean(datsub2.sur$sex_time[datsub2.sur$sex==0], na.rm = TRUE),2),rep(mean(datsub2.sur$sex_time[datsub2.sur$sex==1], na.rm = TRUE), 2)),
+                               cigpday = rep(mean(datsub2.sur$cigpday, na.rm = TRUE), 4))
+
+ggsurvplot(survfit(modsur.opt2,newdata =newdata3),data=datsub2.sur)
+```
+Agecat = 4
+```{r}
+newdata4=data.frame(sex = factor(c(0,0,1,1)), prevhyp = factor(c(0,1,0,1)),
+                               agecat = factor(c(4,4,4,4)),diabetes = factor(c(0,0,0,0)),
+                               sysbp = rep(mean(datsub2.sur$sysbp, na.rm = TRUE), 4),
+                               sex_time = c(rep(mean(datsub2.sur$sex_time[datsub2.sur$sex==0], na.rm = TRUE),2),rep(mean(datsub2.sur$sex_time[datsub2.sur$sex==1], na.rm = TRUE), 2)),
+                               cigpday = rep(mean(datsub2.sur$cigpday, na.rm = TRUE), 4))
+
+ggsurvplot(survfit(modsur.opt2,newdata =newdata4),data=datsub2.sur)
+``` 
+
+Log-rank test using modsur.opt2
+Agecat=1
+```{r}
+data1=datsub2.sur[datsub2.sur$agecat==1,]
+survdiff(survobject~prevhyp+strata(sex),data1)
+survdiff(survobject~sex+strata(prevhyp),data1)
+```
+Control sex, prevhyp significantly different
+control prevhyp, sex not significantly different
+
+Agecat=2
+```{r}
+data2=datsub2.sur[datsub2.sur$agecat==2,]
+survdiff(survobject~prevhyp+strata(sex),data2)
+survdiff(survobject~sex+strata(prevhyp),data2)
+```
+Control sex, prevhyp significantly different
+control prevhyp, sex significantly different
+
+Agecat=3
+```{r}
+data3=datsub2.sur[datsub2.sur$agecat==3,]
+survdiff(survobject~prevhyp+strata(sex),data3)
+survdiff(survobject~sex+strata(prevhyp),data3)
+```
+Control sex, prevhyp significantly different
+control prevhyp, sex significantly different
+
+Agecat=4
+```{r}
+data4=datsub2.sur[datsub2.sur$agecat==4,]
+survdiff(survobject~prevhyp+strata(sex),data4)
+survdiff(survobject~sex+strata(prevhyp),data4)
+```
+Control sex, prevhyp significantly different
+control prevhyp, sex significantly different

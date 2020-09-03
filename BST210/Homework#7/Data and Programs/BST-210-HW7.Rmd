@@ -1,0 +1,171 @@
+---
+title: "BST 210 HW7 Wenjie Gu"
+author: "Wenjie Gu"
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r wrap-hook}
+library(knitr)
+hook_output = knit_hooks$get('output')
+knit_hooks$set(output = function(x, options) {
+  # this hook is used only when the linewidth option is not NULL
+  if (!is.null(n <- options$linewidth)) {
+    x = knitr:::split_lines(x)
+    # any lines wider than n should be wrapped
+    if (any(nchar(x) > n)) x = strwrap(x, width = n)
+    x = paste(x, collapse = '\n')
+  }
+  hook_output(x, options)
+})
+```
+```{r}
+# load file
+dat = read.table("mlowbwt_data_only.txt",head = T)
+colnames(dat) = tolower(colnames(dat))
+head(dat)
+```
+### Problem 1
+
+#### 1(a)
+```{r}
+library("survival")
+mod1a = clogit(low ~ ptd + strata(stratum), data = dat)
+summary(mod1a)
+```
+```{r}
+exp(confint(mod1a))
+```
+
+We estimated that on average the odds having low birth weight for mothers who have history of premature labor is 6.9389 times the odds of low birth weight among those without history of premature labor, with a 95% confidence interval of (2.177144, 22.11563).
+
+#### 1(b)
+```{r}
+mod1b = clogit(low ~ ptd + age + strata(stratum), data = dat, method = "exact")
+summary(mod1b)
+```
+
+The coefficient of age in this model is NA, meaning that we cannot estimate the coefficient of factor age. This makes sense because in this study cases and controls are matched on age and we already added strata() to account for this. If we are matching on a factor, we cannot estimate the beta for that factor and we can only say that we are controlling for that factor with CMLE.
+
+#### 1(c)
+```{r}
+mod1c = clogit(low ~ ptd + strata(age), data =dat, method = "exact")
+summary(mod1c)
+summary(mod1a)
+```
+
+I agree that one could use AGE as the matching variable. After this change, I found that the coefficient of ptd is different from the coefficient from 1b. I would prefer using AGE as matching variable rather than STRATUM. Because if we include subjects with the same age into the same matched set, the estimated coefficient will be the estimated log odds ratio of low birth weight between mothers with and without history of premature labor, holding mother's age constant rather than holding the “stratum group” constant.
+
+#### 1(d)
+```{r}
+mod1d = clogit(low ~ ptd + age*ptd + strata(age), data = dat, method = "exact")
+summary(mod1d)
+```
+
+Yes, we can assess if age is an effect modifier. After including the interaction between age and ptd into the conditional logistic regression model, we found that the coefficient of the interaction term is not significant(p > 0.05). Therefore, age is not an effect modifier for the effect of ptd on low birth weight.
+
+#### 1(e)
+```{r}
+mod1e = glm(low ~ ptd + age, family = binomial(), data = dat)
+summary(mod1e)
+summary(mod1c)
+```
+
+The coefficient of ptd is smaller in the conditional logistic regression model than the unconditional model. Also the standard error of the coefficient in the conditional logistic regression model is also smaller. The unconditional logistic regression model is not an appropriate approach in the analysis of a matched case-control study. The dataset was already collected in a matched design, we have to choose an analysis that accounts for that design => Conditional logistic regression model.
+
+### Problem 2
+#### 2(a)
+```{r}
+library("foreign")
+dat2 = read.table("fromelungcancer.txt", sep = "", header = FALSE)
+colnames(dat2) = c("smokedur", "cigpday", "cases", "manyears")
+View(dat2)
+```
+
+```{r}
+mod2a = glm(cases~cigpday, family = poisson(), offset = log(manyears), data = dat2)
+mod2a.1 = glm(cases~cigpday + smokedur, family = poisson(), offset = log(manyears), data = dat2)
+# Assess confounding
+summary(mod2a)
+summary(mod2a.1)
+```
+
+Smoking duration is a potential confounder for the effect of cigarettes smoking per day on lung cancer incidence:
+1) Smoking duration is associated with cigarettes smoking per day in the absence of lung cancer.
+2) Smoking duration is associated with lung cancer.
+3) Smoking duration is not a downstream effect of cigarettes smoking per day.
+
+Now, we can assess if smoking duration is a confounder using our 10% rule:
+Since the coefficient for cigpday changes from 0.070359 to 0.066712 after including smokedur in the poisson regression model (decrease by 5.1%), which is less than 10%, smokedur is not a confounder of the effect of cigpday on log lung cancer incidence.
+
+```{r}
+# Assess effect modification
+mod2a.2 = glm(cases~ cigpday + smokedur * cigpday, family = poisson(), offset = log(manyears), data = dat2)
+summary(mod2a.2)
+```
+
+Since the interaction between cigpday and smokedur is not significatn according to wald test, we can say that cigpday does not modify the effect of smokedur on log lung cancer incidence.
+
+```{r, linewidth=70}
+summary(mod2a)
+confint(mod2a)
+cat(sprintf("The incidence rate ratio of lung cancer comparing a population of individuals with a fixed average cigarette smoking per day to a population of individuals with a 1-unit lower average cigarette smoking per day is estimated to be %.3f, with a 95%% confidence interval of (%.3f, %.3f).", exp(0.070359), exp(0.05773514), exp(0.08310548)))
+```
+
+
+#### 2(b)
+```{r}
+mod2b = glm(cases ~ cigpday + I(cigpday^2) + smokedur + I(smokedur^2), family = poisson(), offset = log(manyears), data = dat2)
+summary(mod2b)
+```
+
+```{r}
+anova(mod2a, mod2b, test= "Chisq")
+```
+
+This model including linear and quadratic terms of both cigpday and smokedur has an AIC score of 191.21, which is lower than the AIC score of the model in 2a) (AIC = 448.55). Conducting an anova test on the two models also gives a p-value < 0.05, indicating that including linear and quadratic terms of both cigpday and smokedur is necessary.
+
+```{r}
+vcov(mod2b)
+pointest1 = 1.561e-01 *20 + (-1.938e-03) * 20^2
+std1 = sqrt(20^2 * 7.836882e-04 + 400^2 * 3.096828e-07 + 2*20*400 * -1.498570e-05)
+lower1 = pointest1 - 1.96* std1
+upper1 = pointest1 + 1.96* std1
+
+pointest2 = 1.561e-01 *20 + (-1.938e-03) * (40^2 - 20^2)
+std2 = sqrt(20^2 * 7.836882e-04 + 1200^2 * 3.096828e-07 + 2*20*1200 * -1.498570e-05 )
+lower2 = pointest2 - 1.96*std2
+upper2 = pointest2 + 1.96*std2
+```
+```{r, linewidth=60}
+cat(sprintf("The estimated IRR for the effect of 20 vs. 0 cigarettes per day is %.3f, with a 95%% confidence interval of (%.3f, %.3f).\n", exp(pointest1), exp(lower1), exp(upper1)))
+cat(sprintf("The estimated IRR for the effect of 20 vs. 0 cigarettes per day is %.3f, with a 95%% confidence interval of (%.3f, %.3f).\n", exp(pointest2), exp(lower2), exp(upper2)))
+```
+
+#### 2(c)
+```{r}
+mod2c = glm(cases~ as.factor(cigpday) + as.factor(smokedur), family = poisson(), offset = log(manyears), data =dat2)
+summary(mod2c)
+vcov(mod2c)
+pointest3 = 2.9009
+lower3 = 2.9009 -1.96* 0.5956
+upper3 = 2.9009 +1.96* 0.5956
+
+pointest4 = 3.6059 - 2.9009
+std4 = sqrt(0.365806495 + 0.3547427890 - 2*0.3341526757)
+lower4 = pointest4 - 1.96*std4
+upper4 = pointest4 + 1.96*std4
+```
+
+```{r, linewidth=60}
+cat(sprintf("The estimated IRR for the effect of 20.4 vs. 0 cigarettes per day is %.3f, with a 95%% confidence interval of (%.3f, %.3f).\n", exp(pointest3), exp(lower3), exp(upper3)))
+
+cat(sprintf("The estimated IRR for the effect of 40.8 vs. 20.4 cigarettes per day is %.3f, with a 95%% confidence interval of (%.3f, %.3f).\n", exp(pointest4), exp(lower4), exp(upper4)))
+```
+
+```{r}
+summary(mod2b)$aic
+summary(mod2c)$aic
+```
+
+I would prefer the model in 2b using continuous linear and quadratic terms of both cigpday and smokedur better. Because the model in 2b gives an AIC score of 191.2109, which is lower than the AIC score of 201.3131 given by the model in 2c using cigpday and smokedur as categorical variables. Also the confidence interval of model 2c is wider than the confidence interval of model 2b, indicating more uncertainty in the estimated coefficient of cigpday.

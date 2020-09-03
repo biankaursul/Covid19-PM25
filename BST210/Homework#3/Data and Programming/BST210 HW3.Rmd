@@ -1,0 +1,147 @@
+---
+title: "BST210 HW3"
+author: "Wenjie"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+wrap_rmd(file, width = 80, text = NULL, backup)
+```
+### Question 1
+
+#### #1(a)
+```{r}
+dat <- read.csv("/Users/BiankaUrsul/Documents/Class Info/Harvard HSPH/Fall2019/BST210/Homework#1/Data and Programs/SCCS2_v12.csv")
+library(splines2)
+library(gam)
+```
+
+```{r}
+sorted_dat = dat[order(dat$age),]
+head(sorted_dat)
+mod1 = lm(tc~age, data = sorted_dat)
+mod2 = lm(tc~age+I(age^2), data = sorted_dat)
+mod3 = lm(tc~bSpline(age, knots = quantile(age, c(0.25,0.5,0.75)), degree =2), data = sorted_dat)
+
+attach(sorted_dat)
+plot(age, tc)
+lines(age, fitted(mod1), col = "red")
+lines(age, fitted(mod2), col = "blue")
+lines(age, fitted(mod3), col = "green")
+legend("topright", c("linear age", "linear & quadratic age", "Spline modeling of age"), col = c("red", "blue", "green"), lwd = 1, cex = 0.6)
+summary1 = summary(mod1)
+summary2 = summary(mod2)
+summary3 = summary(mod3)
+summary1
+summary2
+summary3
+detach(sorted_dat)
+```
+
+For the spline modeling of age, I choose the knot points to be the points at 0.25, 0.5 and 0.75 percentile of age data and the order of polynomial set to be 2 (quadratic). Comparing the three sets of fitted values, the spline model curve has a similar pattern as the linear and quadratic age model with age larger than 60, and for age < 60, the spline model curve has a few more twists than the quadratic model. At age < 40, the trends of all three models look similar to each other. 
+The R^2 value is 0.1281 for the linear age model, 0.1472 for the linear and quadratic age model and 0.1511 for the spline model. Therefore, according to the R^2 value, I would recommend the spline model as the "best".
+
+#### #1(b)
+```{r}
+library(splines2)
+mod4 = lm(tc~age + bSpline(age, knots = quantile(age, c(0.25,0.5,0.75)), degree = 2), data = sorted_dat)
+summary4 = summary(mod4)
+summary4
+summary3
+attach(sorted_dat)
+plot(age, tc, main = "Total cholesterol vs. age", xlab = "age", ylab = "total cholesterol")
+lines(age, fitted(mod3), col = "green", lty = "solid")
+lines(age, fitted(mod4), col = "orange", lty = "dashed")
+legend("topright", c("spline", "spline + age"), col = c("green", "orange"), lty = c("solid", "dashed"), lwd = 1, cex = .5)
+difference = fitted(mod3)-fitted(mod4)
+difference
+detach(sorted_dat)
+```
+
+By plotting out the fitted line for spline(age) model and age+spline(age) model, we can see that the two curves overlap, and we found no difference in the predicted values in the two models, which means that the two models give the same prediction. Comparing the residual standard errors, multiple R-squared values and adjusted R-squared values, we found the two models having the exactly same statistics (RSE = 0.9672, multiple R^2 = 0.1591, adjusted R^2 = 0.1511). We can therefore conclude that the linear age model is nested within the spline model.
+
+
+#### #1(c)
+```{r}
+mod5 = lm(tc~age+I(age^2) + bSpline(age, knots = quantile(age, c(0.25,0.5,0.75)), degree = 2), data = sorted_dat)
+summary5 = summary(mod5)
+summary5
+summary3
+attach(sorted_dat)
+plot(age, tc, main = "Total cholesterol vs. age", xlab = "age", ylab = "total cholesterol")
+lines(age, fitted(mod3), col = "green", lty = "solid")
+lines(age, fitted(mod5), col = "orange", lty = "dashed")
+legend("topright", c("spline", "spline + age + age^2"), col = c("green", "orange"), lty = c("solid", "dashed"), lwd = 1, cex = .5)
+detach(sorted_dat)
+```
+
+Similar as in 1(b), the fitted lines of the spline model and the linear + quadratic age model overlap and the residual standard error and R^2 statistics are exactly the same for the two models (Residual standard error = 0.9672, multiple R^2 = 0.1591, adjusted R^2 = 0.1511). Therefore, linear+quadratic age model is nested within the spline model.
+
+#### #1(d)
+```{r}
+anova(mod2, mod5)
+```
+
+Because linear+quadratic age model is nested within the spline model, we can do F test to compare the two models. The p-value for the F test is 0.1489 (> 0.05), indicating that the spline model is not significantly better than the linear and quadratic age model. It is sufficient to use linear and quadratic age model to model the effects of age.
+
+### Problem 2
+#### #2(a)
+```{r}
+sorted_dat$bmi= sorted_dat$weight / (sorted_dat$height/100)^2
+age.gender.bmi.1 = lm(tc~ bmi, data = sorted_dat)
+summary(age.gender.bmi.1)
+```
+
+```{r}
+age.gender.bmi.2 = lm(tc~ bmi + I(bmi^2) , data = sorted_dat)
+summary(age.gender.bmi.2)
+```
+```{r}
+age.gender.bmi.3 = lm(tc ~ bmi +I(bmi^2) + age, data = sorted_dat)
+summary(age.gender.bmi.3)
+```
+
+```{r}
+age.gender.bmi.4 = lm(tc ~ bmi +I(bmi^2) + gender, data = sorted_dat)
+summary(age.gender.bmi.4)
+```
+
+```{r}
+age.gender.bmi.5 = lm(tc~ bmi + I(bmi^2) + age + I(age*bmi), data = sorted_dat)
+summary(age.gender.bmi.5)
+```
+
+```{r}
+age.gender.bmi.6 = lm(tc~ bmi + I(bmi^2) + age + I(gender*bmi), data = sorted_dat)
+summary(age.gender.bmi.6)
+```
+
+```{r}
+final.model = age.gender.bmi.3
+summary(final.model)
+```
+
+We first compare the linear bmi model and the linear and quadratic bmi model, finding out that the coefficient for quadratic bmi term is significant. Therefore, we can make adjustment on top of the linear and quadratic bmi model. Now we're considering age as a confounder of bmi, which in conventional definition makes sense (age is a common cause of bmi and total cholesterol), and after including age term, the coefficients for linear and quadratic bmi terms change significantly, confirming that age is a confounder. But including gender does not effectively change the coefficients for linear or quadratic bmi. Therefore, we only consider age as a confounder.
+
+Now we are considering whether age modifies the effect of bmi on total cholesterol. However the coefficient for the interaction term of age & bmi is not significant, indicating that age does not modify the effect of bmi on total cholesterol. Similarly, the interaction between gender and bmi is not significant, either.
+
+Therefore, the final model I recommend is the model including linear bmi, quadratic bmi and age to predict total cholesterol. (Among the models I tried above, this model has the highest adjusted R^2 value as well.)
+
+#### #2(b)
+```{r}
+confint(final.model) *38.67
+summary(final.model)$coefficients * 38.67
+```
+Total Cholesterol = 1.9547 + 0.1732 * $bmi$ - 0.002647 * $bmi^2$ + 0.02239 * $age$
+
+My final model uses linear bmi(in $kg/m^2$) ($p = 0.0217$), quadratic bmi(in $(kg/m^2)^2$) ($p = 0.0659$) and age ($p = 1.43 \times 10^{-12}$) to predict total cholesterol (in $mg/dl$) of subjects. 
+
+It is not sensible to interpret the intercept 75.59 $mg/dl$ (95% confidence interval: [3.27, 147.91]), as bmi cannot be 0. After adjusting for age, every unit ($kg/m^2$) increase in the linear bmi term (bmi) only will contribute a 6.698 $mg/dl$ (95% confidence interval: [0.983, 12.41]) increase in total cholesterol, and every unit($(kg/m^2)^2$) increase in the quadratic bmi term (bmi^2) will contribute a -0.1024 $mg/dl$ (95% confidence interval: [-0.211, -$6.75 \times 10^{-3}$]) decrease in total cholesteral.
+
+

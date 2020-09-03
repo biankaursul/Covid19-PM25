@@ -1,0 +1,24 @@
+Notes on ordinal model specification in different softwares:
+
+VGAM package in R:
+  cumulative(reverse = FALSE,...): P(Y<=j)/P(Y>j) = a_j + b1X1 + ... + bpXp [default]
+  cumulative(reverse = TRUE,...):  P(Y>=j)/P(Y<j) = a_j + b1X1 + ... + bpXp
+Reference:
+https://www.rdocumentation.org/packages/VGAM/versions/1.0-4/topics/cumulative
+
+
+SAS
+  Default:    P(Y<=j)/P(Y>j) = a_j + b1X1 + ... + bpXp
+  Descending: P(Y>=j)/P(Y<j) = a_j + b1X1 + ... + bpXp
+Reference:
+http://support.sas.com/documentation/cdl/en/statug/66859/HTML/default/viewer.htm#statug_logistic_examples23.htm
+
+
+Stata
+  P(Y<=j)/P(Y>j) = a_j - (b1X1 + ... + bpXp)
+Reference:
+https://www.stata.com/manuals13/rologit.pdf
+https://www.stata.com/support/faqs/statistics/ordered-logistic-and-probit-models/
+https://stats.idre.ucla.edu/stata/output/ordered-logistic-regression/
+http://www.theanalysisfactor.com/ordinal-logistic-regression-mystery/
+http://staff.washington.edu/glynn/olr.pdf

@@ -1,0 +1,168 @@
+---
+title: "BST 210 Homework 5"
+author: "Wenjie Gu"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+```{r, include=FALSE}
+options(tinytex.verbose = TRUE)
+```
+
+```{r}
+# import and clean dataset
+library(haven)
+framingham <- read_dta("framingham.dta")
+framingham = na.omit(framingham[c('sex', 'bmi', 'age','agecat','death')])
+framingham$sex = framingham$sex -1 
+```
+
+
+### Problem 1
+
+#### 1(a)
+```{r}
+# fit logistic regression model -  linear
+bmi.mortality = glm(death~bmi, family = binomial(), data = framingham)
+summary(bmi.mortality)
+```
+
+Intercept: The odds of death from any cause is estimated to be $e^{-1.949618} \approx 0.14233$ for individuals with bmi score equal zero. (Not sensible in real life)
+
+Slope: The odds of death from any cause for an individual is estimated to be $e^{0.050932 \approx 1.0523}$ times higher for every 1-unit increase in his/her bmi value.
+
+```{r}
+# Calculate odds ratio for the effect of a 5-unit change in bmi
+odds_ratio = exp(5* 0.050932)
+cat("The odds ratio for the effect of a 5-unit change in bmi is",odds_ratio, '\n')
+lower_bound = exp(5* (0.050932 - 1.96*0.007686))
+upper_bound = exp(5* (0.050932 + 1.96*0.007686))
+sprintf("The 95 percent CI of OR for the effect of a 5-unit change in bmi is (%f, %f).", 
+        lower_bound, upper_bound)
+```
+
+#### 1(b)
+```{r}
+# fit logistic regression model - linear and quadratic bmi
+bmi.quad.mortality = glm(death ~ bmi + I(bmi^2), family = binomial, data = framingham)
+summary(bmi.quad.mortality)
+```
+
+```{r}
+anova(bmi.mortality, bmi.quad.mortality, test = 'Chisq')
+```
+
+After including the quadratic term, the linear term becomes insignificant.
+
+Since the Likelihood Ratio Test gives p = 0.6936, we fail to reject the null hypothesis where the linear model is sufficient. Therefore, it is not necessary to include the quadratic term.
+
+```{r}
+bmi_range = range(framingham$bmi)
+bmi_range
+```
+```{r}
+xweight = seq(0,100,0.01)
+yweight1 = predict(bmi.mortality,list(bmi = xweight), type = "response")
+yweight2 = predict(bmi.quad.mortality, list(bmi = xweight), type = "response")
+plot(framingham$death ~ framingham$bmi, col = "black", pch = 20, xlim = c(0,60), 
+     main = "Fitted probability curve")
+lines(xweight,yweight1, col = "red")
+lines(xweight, yweight2, col = "dodgerblue")
+legend("bottomright", c("fitted linear logistic regression curve", "fitted quadratic logistic regression curve") ,
+       col = c("red", "dodgerblue") ,lty = "solid", cex = 0.7)
+```
+
+With bmi <20, the model with quadratic bmi term will give a slightly higher mortality probability than the model with only the linear term for a fixed bmi value. For bmi in the approximate range of (20, 35), the two models give similar prediction (the curves overlap). For bmi >35, the model with quadratic bmi term will again give higher prediction result for a fixed bmi than the linear one. However, the trend and shape of the fitted curves is similar.
+
+#### 1(c)
+```{r}
+odds = function(bmi){
+  log_odds = -1.6476413 + 0.0287998 * bmi + 0.0003947 * bmi^2
+  odds = exp(log_odds)
+  return (odds)
+}
+oddsratio1 = odds(25)/odds(20)
+oddsratio2 = odds(35)/odds(30)
+```
+```{r}
+cat("The odds ratio for a 5-unit increase in BMI (comparing 25 to 20) is:", oddsratio1, '\n')
+cat("The odds ratio for a 5-unit increase in BMI (comparing 35 to 30) is:", oddsratio2)
+```
+
+####1(d)
+```{r}
+# Two sample t-test comparing the average bmi of males and females
+t.test(bmi~sex, data = framingham)
+boxplot(bmi~sex, data = framingham)
+```
+
+By performing a t-test comparing the average bmi of males and females, we get a p-value less than 0.05 (p = 1.56e-6). There is evidence suggesting the association between participant sex and bmi.
+
+```{r}
+# check if sex is a confounder  
+bmi.sex.mortality = glm(death~ bmi + sex, family = binomial, data = framingham)
+summary(bmi.sex.mortality)
+summary(bmi.mortality)
+```
+
+Coefficient for bmi changes from 0.050932 to 0.047439 (% of change: -6.8%), which is less than 10%. Therefore sex is not a confounder.
+
+```{r}
+# check if sex is an effect modifier
+bmi.sexint.mortality = glm(death~bmi+bmi*sex, family = binomial, data = framingham)
+summary(bmi.sexint.mortality)
+```
+
+The interaction between bmi and sex has significant coefficient (p = 0.000502), therefore sex is an effect modifier of the effect of continuous BMI on mortality.
+
+For males, the odds of mortality is estimated to be $e^{0.009139} \approx 1.00918$ times higher for every 1-unit increase in bmi value.
+For females, the odds of mortality is estimated to be $e^{0.009139 + 0.057502 \approx 1.0689}$ times higher for every 1-unit increase in bmi value.
+
+#### 1(e)
+```{r}
+age.cont.mortality = glm(death~age, family = binomial, data = framingham)
+age.cat.factor.mortality = glm(death~as.factor(agecat), family = binomial, data = framingham)
+age.cat.cont.mortality= glm(death~agecat, family = binomial, data = framingham)
+```
+```{r}
+anova(age.cat.cont.mortality,age.cat.factor.mortality, test = "Chisq")
+
+AIC(age.cont.mortality)
+AIC(age.cat.cont.mortality)
+AIC(age.cat.factor.mortality)
+
+BIC(age.cont.mortality)
+BIC(age.cat.cont.mortality)
+BIC(age.cat.factor.mortality)
+
+```
+
+
+
+```{r}
+library(ResourceSelection)
+library(LogisticDx)
+fitted.cont.results = ifelse(fitted(age.cont.mortality) > 0.5,1,0)
+fitted.cat.cont.results = ifelse(fitted(age.cat.cont.mortality) > 0.5,1,0)
+fitted.cat.factor.results = ifelse(fitted(age.cat.factor.mortality) > 0.5,1,0)
+
+hoslem.test(framingham$death,fitted(age.cont.mortality) ,g=10)
+chisq.test(framingham$death,fitted(age.cat.cont.mortality))
+chisq.test(framingham$death,fitted(age.cat.factor.mortality))
+```
+Of the three models, the continuous age model has the lowest AIC and BIC scores.
+After assessing for the goodness of fits of the three models, we found that  all the three models give significant Hosmer-Lemeshow/Pearson Chi-squared statistics, indicating that none of the fits are adequate.
+However, if we have to select one "best" model, according to AIC and BIC values, the preferred one should be the continuous age model.
+
+#### 1(f)
+```{r}
+bmi.agecat.mortality = glm(death~bmi + agecat, family=binomial, data = framingham)
+bmi.agecatint.mortality = glm(death ~ bmi + agecat*bmi, family = binomial, data = framingham)
+summary(bmi.mortality)
+summary(bmi.agecat.mortality)
+summary(bmi.agecatint.mortality)
+```
+The coefficient of bmi changes from 0.050932 to 0.029577 (-36% change). Thus age category is a confounder for the effect of bmi on mortality.
+Whereas, the interaction between age category and bmi is not significant, indicating that age category is not an effect modifier for the effect of bmi on mortality.

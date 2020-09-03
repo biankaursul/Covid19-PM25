@@ -1,0 +1,39 @@
+lowess y x, bwidth(0.4)
+
+mkspline q 4 = x, pctile 
+gen x_sq=x^2
+gen x_cub=x^3
+gen x1=cond(x > q2, (x - q2)^3, 0)
+gen x2=cond(x > q3, (x - q3)^3, 0)
+gen x3=cond(x > q4, (x - q4)^3, 0)
+quietly regress y x x_sq x_cub x1 x2 x3
+predict fitted_spline
+twoway scatter y x || line fitted_spline x
+
+
+keep x y
+mkspline q 6 = x, pctile 
+mkspline x_spline = x, cubic knots(3.02 7.42 10.00 12.39 16.04)
+quietly regress y x_spline*
+predict fitted_spline
+twoway scatter y x || line fitted_spline x
+
+
+
+
+keep x y
+mkspline q 4 = x, pctile 
+gen x_sq=x^2
+gen x_cub=x^3
+gen x1=cond(x > q2, (x - q2)^3, 0)
+gen x2=cond(x > q3, (x - q3)^3, 0)
+gen x3=cond(x > q4, (x - q4)^3, 0)
+regress y x x_sq x_cub x1 x2 x3
+test (x_sq=0)(x_cub=0)(x1=0)(x2=0)(x3=0)
+
+
+keep x y
+mkspline q 6 = x, pctile 
+mkspline x_spline = x, cubic knots(3.02 7.42 10.00 12.39 16.04)
+regress y x x_spline*
+test (x_spline2=0)(x_spline3=0)(x_spline4=0)

@@ -1,0 +1,241 @@
+---
+title: "BST 210 Homework 6"
+author: "Wenjie Gu"
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r wrap-hook}
+library(knitr)
+hook_output = knit_hooks$get('output')
+knit_hooks$set(output = function(x, options) {
+  # this hook is used only when the linewidth option is not NULL
+  if (!is.null(n <- options$linewidth)) {
+    x = knitr:::split_lines(x)
+    # any lines wider than n should be wrapped
+    if (any(nchar(x) > n)) x = strwrap(x, width = n)
+    x = paste(x, collapse = '\n')
+  }
+  hook_output(x, options)
+})
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(foreign)
+library(dplyr)
+library(nnet)
+```
+
+### Problem 1
+```{r}
+# Data cleaning
+library(haven)
+framingham = read_dta("Data and Programs/framingham.dta")
+framingham = framingham[framingham$prevchd == 0,]
+```
+```{r}
+framingham$outcome = (framingham$death == 0 & framingham$anychd == 0)*1 + 
+  (framingham$death == 0 & framingham$anychd == 1)*2 + (framingham$death == 1)*3
+framingham$prevchd = NULL
+framingham$sex = framingham$sex -1
+```
+
+
+```{r}
+summ.MNfit <- function(fit, digits=3){
+  s <- summary(fit)
+  for(i in 2:length(fit$lev))
+  {
+    ##
+    cat("\nLevel", fit$lev[i], "vs. Level", fit$lev[1], "\n")
+    ##
+    betaHat <- s$coefficients[(i-1),]
+    se <- s$standard.errors[(i-1),]
+    zStat <- betaHat / se
+    pval <- 2 * pnorm(abs(zStat), lower.tail=FALSE)
+    ##
+    RRR <- exp(betaHat)
+    RRR.lo <- exp(betaHat - qnorm(0.975)*se)
+    RRR.up <- exp(betaHat + qnorm(0.975)*se)
+    ##
+    results <- cbind(betaHat, se, pval, RRR, RRR.lo, RRR.up)
+    print(round(results, digits=digits))
+  }
+}
+```
+```{r}
+model.sex = multinom(outcome~sex, data = framingham)
+model.age = multinom(outcome~age, data = framingham)
+model.age.sex = multinom(outcome~age+sex, data = framingham)
+model.age.sex.int = multinom(outcome~age+sex+age*sex, data = framingham)
+```
+
+#### 1(a)
+```{r}
+age.seq = seq(0,80,0.01)
+prob.model.age = predict(model.age,list(age = age.seq), type = 'probs')
+par(mfrow = c(1,1))
+plot(age.seq, prob.model.age[,1], cex = 0.05, main = "Probability of Outcomes", 
+     xlab ="age",ylab = "probability", col = "dodgerblue")
+points(age.seq, prob.model.age[,2], cex = 0.05, col = "lightgreen")
+points(age.seq, prob.model.age[,3], cex = 0.05, col = "orange")
+legend("right",c("Outcome 1", "Outcome 2", "Outcome 3"), 
+       col = c("dodgerblue","lightgreen","orange"), lwd = 1.5, cex = 0.7)
+```
+
+As age goes up, the estimated probability of outcome 1d (no death or chronic heart disease in the follow-up period) decreases.
+The probability of outcome 2 (chronic heart disease, but remained alive) follows a parabolic pattern, and reaches maximum at around 40 yo.
+The probability of outcome 3 (death) gets larger as age goes up. 
+According to the fitted probability curves, the probability of outcome 2 (CHD) is overall lower than outcome 1 (no chd or death) and outcome 3 (death). 
+For people older than 55 years old, the prevalent outcome is death and for people younger than 55 years old, the prevalent outcome is no death or chd.
+
+```{r}
+summ.MNfit(model.age)
+confint(model.age)
+```
+```{r}
+vcov(model.age)
+```
+```{r}
+beta3_2_std = sqrt(4.080459e-05 + 2.206629e-05 - 2* 7.955112e-06)
+beta3_2_std
+lower = exp(0.117*10 - 0.026*10- 1.96 * beta3_2_std *10)
+upper = exp(0.117*10 - 0.026*10+ 1.96 * beta3_2_std *10)
+```
+```{r, results = 'asis'}
+cat(sprintf("The estimated relative risk ratio of having outcome 2 to having outcome 1 for a population is %.3f times this risk ratio for a population that is 10 years younger, with a 95%% confidence interval (%.3f,%.3f). \n", 
+            exp(0.026*10), exp(0.01326*10), exp(0.0383*10)))
+cat(sprintf("The estimated relative risk ratio of having outcome 3 to having outcome 1 for a population is %.3f times this risk ratio for a population that is 10 years younger, with a 95%% confidence interval (%.3f,%.3f). \n", 
+            exp(0.117*10), exp(0.1073*10), exp(0.12574*10)))
+cat(sprintf("The estimated relative risk ratio of having outcome 3 to having outcome 2 for a population is %.3f times this risk ratio for a population that is 10 years younger, with a 95%% confidence interval (%.3f,%.3f). \n", 
+            exp(0.117*10)/exp(0.026*10),lower, upper))
+```
+
+#### 1(b)
+```{r}
+female = fitted(model.sex)[framingham$sex == 1,][1,]
+male = fitted(model.sex)[framingham$sex == 0,][1,]
+fitted_prob_table_sex = rbind(male,female)
+outcome_sex_table = table(framingham$sex, framingham$outcome)
+outcome_sex_table_prop = prop.table(outcome_sex_table, 1)
+```
+```{r}
+fitted_prob_table_sex
+outcome_sex_table_prop
+```
+
+According to the tables above, we can confirm that for the model with sex alone, the fitted probabilities match the outcome-sex tabulation exactly.
+
+```{r}
+summ.MNfit(model.sex)
+outcome_sex_table_prop
+```
+
+RRR_21 = (P(Y=2|female)/P(Y=1|female))/(P(Y=2|male)/P(Y=1|male)) = (0.09876033/0.62603306)/(0.12362637/0.46978022)
+RRR_31 = (P(Y=3|female)/P(Y=1|female))/(P(Y=3|male)/P(Y=1|male)) = (0.27520661/0.62603306)/(0.40659341/0.46978022)
+
+```{r}
+# calculated RRRs from the tabulation
+RRR_21 = (0.09876033/0.62603306)/(0.12362637/0.46978022)
+RRR_21
+RRR_31 = (0.27520661/0.62603306)/(0.40659341/0.46978022)
+RRR_31
+```
+
+According to the summary of the model with sex alone, relative risk ratio of outcome 2 to outcome 1 is 0.600, and relative risk ratio of outcome 3 to outcome 1 is 0.508. The calculated RRRs from the tabulation match the results.
+
+#### 1(c)
+```{r}
+anova(model.age.sex, model.age.sex.int, test = "Chisq")
+```
+
+The LRT statistic has a p-value = 0.028 (p<0.05). Therefore, we can reject the reduced model and conclude that the model including age,sex, and their interaction performs better than the one without interaction. We can consider fitting models with non-linear age terms in our next step.
+
+### Problem 2
+```{r}
+library(VGAM)
+library(stats4)
+library(splines)
+ord.age = vglm(outcome~age,cumulative(parallel=TRUE, reverse=TRUE), data = framingham)
+ord.sex = vglm(outcome~sex,cumulative(parallel=TRUE, reverse=TRUE), data = framingham)
+ord.age.sex = vglm(outcome~age + sex,cumulative(parallel=TRUE, reverse=TRUE), data = framingham)
+ord.age.sex.int = vglm(outcome~age + sex + age*sex,cumulative(parallel=TRUE, reverse=TRUE), data = framingham)
+```
+
+#### 2(a)
+```{r}
+# model with age alone
+summary(ord.age)
+confint(ord.age)
+```
+
+```{r, results = 'asis'}
+cat(sprintf("The estimated odds ratio  for the effect of 10 years comparing outcome 3 vs. outcome 1 and 2 (combined) is %.3f with 95%% confidence intervale of (%.3f,%.3f).\n", 
+        exp(0.099351*10), exp(0.0915555*10), exp(0.1071468*10)))
+cat(sprintf("The estimated odds ratio  for the effect of 10 years comparing outcome 2 and 3(combined) vs. outcome 1 is also %.3f with 95%% confidence intervale of (%.3f,%.3f).\n", 
+        exp(0.099351*10), exp(0.0915555*10), exp(0.1071468*10)))
+
+```
+
+#### 2(b)
+```{r}
+framingham$outcome1 = 1*(framingham$outcome == 3)
+framingham$outcome2 = 1*(framingham$outcome == 2 | framingham$outcome == 3)
+log.outcome1 = glm(outcome1~age, family = binomial(), data = framingham)
+log.outcome2 = glm(outcome2~age, family = binomial(), data = framingham)
+summary(log.outcome1)
+summary(log.outcome2)
+```
+```{r}
+confint(log.outcome1)
+confint(log.outcome2)
+```
+
+The two beta coefficients for age in the two logistic regression models are 0.111896 and 0.09121 respectively, which are not close to each other. And the 95% CIs are (0.1031075, 0.1208437) and (0.08320882, 0.09932408) respectively, which do not overlap. Therefore, I suggest that proportional odds assumption doesn't hold for the ordinal logistic regression model with age alone.
+
+#### 2(c)
+```{r}
+summary(ord.sex)
+```
+
+```{r}
+# model with sex alone
+tab1 = table(framingham$outcome1, framingham$sex)
+tab2 = table(framingham$outcome2, framingham$sex)
+tab1
+tab2
+```
+```{r}
+OR_12_3 = (666/1754)/(740/1080)
+OR_12_3
+
+OR_1_23 = (905/1515)/(965/855)
+OR_1_23
+```
+
+The associated odds ratio estimates are 0.554169 ((1,2) vs. 3) and 0.5292669 (1 vs (2,3)) are close to the ordinal logistic regrssion-based odds ratio estimate for sex: 0.5388392. Therefore, I suggest that the proportional odds model assumption holds for the ordinal logistic regrssion model with sex alone.
+However, in the ordinal logistic regrssion model, there are 2 covariate patterns (female or male) and 3 parameters, indicating that the ordinal logisitc regression model for sex alone is not saturated.
+
+#### 2(d)
+```{r}
+pchisq(deviance(ord.age.sex)-deviance(ord.age.sex.int), 
+       df = df.residual(ord.age.sex)-df.residual(ord.age.sex.int),lower.tail=F)
+summary(ord.age.sex.int)
+```
+
+By comparing the ordinal logistic regrssion model with age $\times$ sex interaction and without age $\times$ sex interaction with a "likelihood ratio" test, we get p-value = 0.2305 (>0.05).  Furthermore, according to Wald test, in ordinal logistic regrssion model with age $\times$ sex interaction, the interaction term is not significant. Therefore, we fail to reject the null hypothesis and conclude that the age $\times$ sex interaction is not necessary for ordinal logistic regrssion modeling.
+
+#### 2(e)
+```{r}
+ord.po = vglm(outcome~age+sex, family = cumulative(parallel = TRUE, 
+    reverse = TRUE), data = framingham)
+ord.npo = vglm(outcome~age+sex,family = cumulative(parallel = FALSE, 
+    reverse = TRUE), data = framingham)
+pchisq(deviance(ord.po)- deviance(ord.npo), 
+       df = df.residual(ord.po) - df.residual(ord.npo), lower.tail = F)
+```
+
+By comparing the model with proportional odds assumption and the one without with a "likelihood ratio" test, we get p-value = 1.423149e-09 (<0.05). Therefore, we reject the null hypothesis and conclude that porportional odds assumption does not hold for the model including both effects of age and sex. I would recommend using multinomial logistic regression if we wanted to include continuous age in the modeling. On top of that, we can add quadratic term of age to the model and assess whether there is nonlinear relationship between age and outcome.

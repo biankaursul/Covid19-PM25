@@ -1,0 +1,204 @@
+---
+title: "Group Project"
+author: "Shaoling Han"
+date: "October 21, 2019"
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r,echo=F}
+# clean data: transform each column to 0/1 binary responses and drop 
+hers=read.csv("hers.BST210.csv")
+hers=na.omit(hers)
+hers$HT=1*(hers$HT=='hormone therapy')
+hers$white=1*(hers$raceth=='White')
+hers$AA=1*(hers$raceth=='African American')
+hers$smoking=1*(hers$smoking=='yes')
+hers$drinkany=1*(hers$drinkany=='yes')
+hers$exercise=1*(hers$exercise=='yes')
+```
+```{r}
+hers$physact=factor(hers$physact,levels=c("much less active", "somewhat less active", "about as active",  "somewhat more active",  "much more active"))
+hers$physact=as.numeric(hers$physact)
+hers$globrat=as.numeric(factor(hers$globrat,levels=c('poor','fair','good','very good', 'excellent')))
+hers$poorfair=1*(hers$poorfair=='yes')
+hers$htnmeds=1*(hers$htnmeds=='yes')
+hers$statins=1*(hers$statins=='yes')
+hers$diabetes=1*(hers$diabetes=='yes')
+hers$dmpills=1*(hers$dmpills=='yes')
+hers$insulin=1*(hers$insulin=='yes')
+hers=hers[,-c(3,4)]
+hers=na.omit(hers)
+```
+
+```{r}
+hers$LDL_diff=(hers$LDL1-hers$LDL)/hers$LDL
+hers$HDL_diff=(hers$HDL1-hers$HDL)/hers$HDL
+hers$TG_diff=(hers$TG1-hers$TG)/hers$TG
+hers$weight_diff=(hers$weight1-hers$weight)/hers$weight
+hers$BMI_diff=(hers$BMI1-hers$BMI)/hers$BMI
+hers$waist_diff=(hers$waist1-hers$waist)/hers$waist
+hers$WHR_diff=(hers$WHR1-hers$WHR)/hers$WHR
+hers$glucose_diff=(hers$glucose1-hers$glucose)/hers$glucose
+```
+```{r}
+hers$LDL_diff_binary=1*(hers$LDL_diff<0)
+hers$HDL_diff_binary=1*(hers$HDL_diff>0)
+hers$TG_diff_binary=1*(hers$TG_diff<0)
+# discuss the threshold instead of 0
+```
+```{r}
+hers2=hers[,-c(15:32,35,38:48)]
+```
+
+
+
+
+
+```{r}
+outcome=hers[,c(46:48)]
+```
+```{r}
+# Logistic model predicting the difference in LDL between year 1 and baseline --- increase=1,decrease=0
+logit_LDL=glm(outcome$LDL_diff_binary~.,family=binomial(),data=hers2)
+summary(logit_LDL)
+```
+
+
+```{r}
+logit_LDL_reduced=glm(outcome$LDL_diff_binary~HT,family=binomial(),data=hers2)
+summary(logit_LDL_reduced)
+```
+```{r}
+logit_LDL_reduced2=glm(outcome$LDL_diff_binary~HT+HT*statins,family=binomial(),data=hers2)
+summary(logit_LDL_reduced2)
+```
+```{r}
+logit_LDL_reduced3=glm(outcome$LDL_diff_binary~HT+HT*physact + HT*statins,family=binomial(),data=hers2)
+summary(logit_LDL_reduced3)
+```
+
+```{r}
+anova(logit_LDL_reduced3,logit_LDL_reduced2,test='Chisq')
+### THE BEST MODEL IS LDL_diff_binary ~ HT + statins + HT * statins
+```
+
+```{r}
+logit_LDL_reduced4 = glm(outcome$LDL_diff_binary~HT+HT*physact,family=binomial(),data=hers2)
+anova(logit_LDL_reduced, logit_LDL_reduced2,test = "Chisq")
+```
+```{r}
+anova(logit_LDL_reduced, logit_LDL_reduced3,test = "Chisq")
+```
+
+
+```{r}
+install.packages("ROCR")
+library(ROCR)
+fitted.results_LDL=predict(logit_LDL_reduced3,newdata = hers2,type = 'response')
+pred <- prediction(fitted.results_LDL, outcome$LDL_diff_binary)
+perf <- performance(pred,"tpr","fpr")
+plot(perf,colorize=T)
+```
+
+```{r}
+fitted.results_LDL2 =predict(logit_LDL_reduced2 ,newdata = hers2,type = 'response')
+pred2 <- prediction(fitted.results_LDL2, outcome$LDL_diff_binary)
+perf2 <- performance(pred2,"tpr","fpr")
+plot(perf2,colorize=T)
+```
+```{r}
+performance(pred,"auc")
+```
+```{r}
+performance(pred2,"auc")
+```
+```{r}
+lm_LDL=lm(hers$LDL_diff~HT*statins,data=hers2)
+summary(lm_LDL)
+```
+
+```{r}
+anova(logit_LDL_reduced,logit_LDL_reduced3, "chisq")
+```
+
+
+
+
+
+
+
+
+
+```{r}
+# Logistic model predicting the difference in HDL between year 1 and baseline --- decrease=1,increase=0
+logit_HDL=glm(outcome$HDL_diff_binary~.,family = binomial(),data=hers2)
+summary(logit_HDL)
+```
+```{r}
+logit_HDL_reduced3=glm(outcome$HDL_diff_binary~HT*drinkany+HT*physact+HT*AA,family = binomial(),data=hers2)
+summary(logit_HDL_reduced3)
+```
+```{r}
+logit_HDL_reduced=glm(outcome$HDL_diff_binary~HT,family = binomial(),data=hers2)
+summary(logit_HDL_reduced)
+```
+```{r}
+logit_HDL_reduced2=glm(outcome$HDL_diff_binary~HT+drinkany+physact+AA,family = binomial(),data=hers2)
+summary(logit_HDL_reduced2)
+```
+```{r}
+anova(logit_HDL_reduced,logit_HDL_reduced2,test='Chisq')
+### THE BEST MODEL IS HDL_diff_binary ~ HT
+
+```
+```{r}
+# Logistic model predicting the difference in TG between year 1 and baseline --- increase=1,decrease=0
+logit_TG=glm(outcome$TG_diff_binary~.,family = binomial(),data=hers2)
+summary(logit_TG)
+```
+
+```{r}
+logit_TG_reduced=glm(outcome$TG_diff_binary~HT,family = binomial(),data=hers2)
+summary(logit_TG_reduced)
+```
+```{r}
+logit_TG_reduced2=glm(outcome$TG_diff_binary~HT+white+AA,family = binomial(),data=hers2)
+summary(logit_TG_reduced2)
+```
+```{r}
+anova(logit_TG_reduced,logit_TG_reduced2,test='Chisq')
+### THE BEST MODEL IS TG_diff_binary ~ HT
+```
+```{r}
+logit_TG_reduced3=glm(outcome$TG_diff_binary~HT*white+HT*AA,family = binomial(),data=hers2)
+summary(logit_TG_reduced3)
+```
+
+```{r}
+##  Test on potential side effect/ unintended benefits of HT -- on change in glucose level (linear regression)
+outcome2=hers[,c(41:45)]
+mod1=lm(outcome2$glucose_diff~.,data=hers2)
+summary(mod1)
+
+```
+
+```{r}
+library(MASS)
+mod1_forw=stepAIC(lm(outcome2$glucose_diff~1,data=hers2),~HT+globrat+poorfair+
+                    dmpills+insulin+white+AA)
+summary(mod1_forw)
+## Best fitted model by forward casting based on AIC value is glucose_diff ~ insulin + dmpills + HT + AA + white 
+```
+
+```{r}
+##  Test on potential side effect/ unintended benefits of HT -- on change in BMI (linear regression)
+mod2=lm(outcome2$BMI_diff~.,data=hers2)
+summary(mod2)
+```
+```{r}
+mod2_forw=stepAIC(lm(outcome2$BMI_diff~1,data=hers2),~HT+age+smoking)
+summary(mod2_forw)
+## Best fitted model by forward casting based on AIC value is BMI_diff ~ HT + age + smoking
+```
+
